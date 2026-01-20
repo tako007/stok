@@ -3,23 +3,24 @@ import pandas as pd
 import requests
 import base64
 import os
+import hashlib
 from io import StringIO
 from datetime import date
 
 # --------------------------------------------------
-# BASIC AUTH AYARLARI (PoC amaçlı)
+# AUTH AYARLARI (Secrets'tan)
 # --------------------------------------------------
-VALID_USERNAME = "mutdhlab"
-VALID_PASSWORD = "12345MUTDH"
+AUTH_USERNAME = os.getenv("AUTH_USERNAME")
+AUTH_PASSWORD_HASH = os.getenv("AUTH_PASSWORD_HASH")
 
 # --------------------------------------------------
-# Session state
+# Session
 # --------------------------------------------------
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 # --------------------------------------------------
-# LOGIN EKRANI
+# LOGIN
 # --------------------------------------------------
 def login():
     st.title("🔐 Giriş Yap")
@@ -30,12 +31,21 @@ def login():
         submit = st.form_submit_button("Giriş")
 
     if submit:
-        if username == VALID_USERNAME and password == VALID_PASSWORD:
+        password_hash = hashlib.sha256(password.encode()).hexdigest()
+
+        if username == AUTH_USERNAME and password_hash == AUTH_PASSWORD_HASH:
             st.session_state.authenticated = True
             st.success("Giriş başarılı")
             st.rerun()
         else:
             st.error("Kullanıcı adı veya şifre yanlış")
+
+# --------------------------------------------------
+# AUTH CHECK
+# --------------------------------------------------
+if not st.session_state.authenticated:
+    login()
+    st.stop()
 
 # --------------------------------------------------
 # GITHUB AYARLARI
@@ -68,8 +78,7 @@ def load_csv():
 # CSV GÜNCELLE
 # --------------------------------------------------
 def update_csv(df, sha):
-    csv_bytes = df.to_csv(index=False).encode("utf-8")
-    encoded = base64.b64encode(csv_bytes).decode("utf-8")
+    encoded = base64.b64encode(df.to_csv(index=False).encode()).decode()
 
     payload = {
         "message": "Yeni stok kaydı eklendi",
@@ -82,70 +91,45 @@ def update_csv(df, sha):
     r.raise_for_status()
 
 # --------------------------------------------------
-# AUTH KONTROLÜ
-# --------------------------------------------------
-if not st.session_state.authenticated:
-    login()
-    st.stop()
-
-# --------------------------------------------------
-# UYGULAMA (LOGIN SONRASI)
+# UI
 # --------------------------------------------------
 st.set_page_config(page_title="Stok Takip", layout="wide")
 st.title("📦 Stok Takip Sistemi")
 
 with st.form("stok_formu"):
-    col1, col2, col3 = st.columns(3)
+    c1, c2, c3 = st.columns(3)
 
-    with col1:
+    with c1:
         lot_no = st.text_input("Lot Numarası")
 
-    with col2:
+    with c2:
         test = st.text_input("Test")
 
-    with col3:
-        son_kullanim = st.date_input(
-            "Son Kullanma Tarihi",
-            min_value=date.today()
-        )
+    with c3:
+        son_kullanim = st.date_input("Son Kullanma Tarihi", min_value=date.today())
 
     kaydet = st.form_submit_button("Kaydet")
 
 if kaydet:
     if not lot_no or not test:
-        st.error("Lot numarası ve test alanı zorunlu")
+        st.error("Lot numarası ve test zorunlu")
     else:
-        try:
-            df, sha = load_csv()
+        df, sha = load_csv()
+        df = pd.concat([df, pd.DataFrame([{
+            "lot_numarasi": lot_no,
+            "test": test,
+            "son_kullanma_tarihi": son_kullanim
+        }])], ignore_index=True)
 
-            yeni_kayit = {
-                "lot_numarasi": lot_no,
-                "test": test,
-                "son_kullanma_tarihi": son_kullanim
-            }
-
-            df = pd.concat([df, pd.DataFrame([yeni_kayit])], ignore_index=True)
-            update_csv(df, sha)
-
-            st.success("Kayıt başarıyla eklendi")
-            st.rerun()
-
-        except Exception as e:
-            st.error("Bir hata oluştu")
-            st.code(str(e))
+        update_csv(df, sha)
+        st.success("Kayıt eklendi")
+        st.rerun()
 
 st.divider()
 st.subheader("📊 Mevcut Stoklar")
+df, _ = load_csv()
+st.dataframe(df, use_container_width=True)
 
-try:
-    df, _ = load_csv()
-    st.dataframe(df, use_container_width=True)
-except:
-    st.warning("Veri yüklenemedi")
-
-# --------------------------------------------------
-# ÇIKIŞ
-# --------------------------------------------------
 if st.button("Çıkış Yap"):
     st.session_state.authenticated = False
     st.rerun()
