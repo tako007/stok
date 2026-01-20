@@ -4,7 +4,9 @@ import requests, base64, os, hashlib
 from io import StringIO
 from datetime import date
 
-# ---------------- TEST LIST ----------------
+# --------------------------------------------------
+# TEST LIST
+# --------------------------------------------------
 TEST_LIST = [
     "Alanin aminotransferaz (ALT) (Serum/Plazma)",
     "Albümin (Serum/Plazma)",
@@ -61,7 +63,9 @@ TEST_LIST = [
     "Vitamin B12"
 ]
 
-# ---------------- AUTH ----------------
+# --------------------------------------------------
+# AUTH
+# --------------------------------------------------
 AUTH_USERNAME = os.getenv("AUTH_USERNAME")
 AUTH_PASSWORD_HASH = os.getenv("AUTH_PASSWORD_HASH")
 
@@ -78,13 +82,15 @@ def login():
                 st.session_state.auth = True
                 st.rerun()
             else:
-                st.error("Hatalı bilgi")
+                st.error("Hatalı kullanıcı adı veya şifre")
 
 if not st.session_state.auth:
     login()
     st.stop()
 
-# ---------------- GITHUB ----------------
+# --------------------------------------------------
+# GITHUB
+# --------------------------------------------------
 TOKEN = os.getenv("GITHUB_TOKEN")
 REPO = os.getenv("GITHUB_REPO")
 CSV = os.getenv("CSV_PATH")
@@ -93,14 +99,14 @@ EXPIRED = "data/expired.csv"
 def headers():
     return {"Authorization": f"token {TOKEN}"}
 
-def load(path):
+def load_csv(path):
     r = requests.get(f"https://api.github.com/repos/{REPO}/contents/{path}", headers=headers())
     r.raise_for_status()
     j = r.json()
     df = pd.read_csv(StringIO(base64.b64decode(j["content"]).decode()))
     return df, j["sha"]
 
-def save(df, sha, path, msg):
+def save_csv(df, sha, path, msg):
     content = base64.b64encode(df.to_csv(index=False).encode()).decode()
     requests.put(
         f"https://api.github.com/repos/{REPO}/contents/{path}",
@@ -108,22 +114,28 @@ def save(df, sha, path, msg):
         json={"message": msg, "content": content, "sha": sha}
     ).raise_for_status()
 
-# ---------------- LOAD DATA ----------------
-df, sha = load(CSV)
-exp_df, exp_sha = load(EXPIRED)
+# --------------------------------------------------
+# LOAD DATA
+# --------------------------------------------------
+df, sha = load_csv(CSV)
+exp_df, exp_sha = load_csv(EXPIRED)
 
 today = pd.to_datetime(date.today())
 df["son_kullanma_tarihi"] = pd.to_datetime(df["son_kullanma_tarihi"], errors="coerce")
 
-# ---------------- EXPIRED MOVE ----------------
+# --------------------------------------------------
+# EXPIRED MOVE
+# --------------------------------------------------
 expired = df[df["son_kullanma_tarihi"] < today]
 if not expired.empty:
     exp_df = pd.concat([exp_df, expired], ignore_index=True)
     df = df[df["son_kullanma_tarihi"] >= today]
-    save(exp_df, exp_sha, EXPIRED, "Expired eklendi")
-    save(df, sha, CSV, "Expired çıkarıldı")
+    save_csv(exp_df, exp_sha, EXPIRED, "Expired kit eklendi")
+    save_csv(df, sha, CSV, "Expired kit çıkarıldı")
 
-# ---------------- UI ----------------
+# --------------------------------------------------
+# UI - ADD FORM
+# --------------------------------------------------
 st.set_page_config(layout="wide")
 st.title("📦 Kit Stok Takip")
 
@@ -132,7 +144,7 @@ with st.form("add"):
     lot = c1.text_input("Lot numarası")
     test = c2.selectbox("Test", TEST_LIST)
     adet = c3.number_input("Test sayısı", min_value=1, step=1)
-    skt = c4.date_input("SKT", min_value=date.today())
+    skt = c4.date_input("Son Kullanma Tarihi", min_value=date.today())
 
     if st.form_submit_button("Kaydet"):
         dup = df[(df["lot_numarasi"] == lot) & (df["test"] == test)]
@@ -147,29 +159,61 @@ with st.form("add"):
             "son_kullanma_tarihi": skt
         }])], ignore_index=True)
 
-        save(df, sha, CSV, "Yeni kit eklendi")
+        save_csv(df, sha, CSV, "Yeni kit eklendi")
         st.success("Kayıt eklendi")
         st.rerun()
 
-# ---------------- FILTER ----------------
+# --------------------------------------------------
+# FILTER
+# --------------------------------------------------
 filter_test = st.selectbox("Test filtresi", ["Tümü"] + TEST_LIST)
 view = df if filter_test == "Tümü" else df[df["test"] == filter_test]
 
+view = view.reset_index(drop=True)
 view["kalan_gun"] = (view["son_kullanma_tarihi"] - today).dt.days
 
 kritik = view[view["kalan_gun"] <= 10]
 if not kritik.empty:
     st.warning(f"⚠️ Son 10 gün içinde bitecek {len(kritik)} kit var")
 
-def highlight(row):
-    if row["kalan_gun"] <= 10:
-        return ["background-color:#ffcccc"] * len(row)
-    return [""] * len(row)
+# --------------------------------------------------
+# TABLE WITH DELETE
+# --------------------------------------------------
+h = st.columns([2, 6, 2, 2, 2, 1])
+h[0].write("Lot")
+h[1].write("Test")
+h[2].write("Adet")
+h[3].write("SKT")
+h[4].write("Kalan Gün")
+h[5].write("Sil")
 
-st.dataframe(view.style.apply(highlight, axis=1), use_container_width=True)
+for i, row in view.iterrows():
+    bg = "#ffcccc" if row["kalan_gun"] <= 10 else "transparent"
+    cols = st.columns([2, 6, 2, 2, 2, 1])
 
+    cols[0].markdown(f"<div style='background:{bg}'>{row['lot_numarasi']}</div>", unsafe_allow_html=True)
+    cols[1].markdown(f"<div style='background:{bg}'>{row['test']}</div>", unsafe_allow_html=True)
+    cols[2].markdown(f"<div style='background:{bg}'>{row['test_sayisi']}</div>", unsafe_allow_html=True)
+    cols[3].markdown(f"<div style='background:{bg}'>{row['son_kullanma_tarihi'].date()}</div>", unsafe_allow_html=True)
+    cols[4].markdown(f"<div style='background:{bg}'>{row['kalan_gun']}</div>", unsafe_allow_html=True)
+
+    if cols[5].button("🗑️", key=f"del_{i}"):
+        df = df.drop(
+            df[
+                (df["lot_numarasi"] == row["lot_numarasi"]) &
+                (df["test"] == row["test"])
+            ].index
+        )
+        save_csv(df, sha, CSV, "Kit silindi")
+        st.success("Kayıt silindi")
+        st.rerun()
+
+# --------------------------------------------------
+# FOOTER
+# --------------------------------------------------
 st.info(f"Toplam test sayısı: {view['test_sayisi'].sum()}")
 
 if st.button("Çıkış"):
     st.session_state.auth = False
     st.rerun()
+
