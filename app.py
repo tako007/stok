@@ -82,7 +82,7 @@ def login():
                 st.session_state.auth = True
                 st.rerun()
             else:
-                st.error("Hatalı kullanıcı adı veya şifre")
+                st.error("Hatalı bilgi")
 
 if not st.session_state.auth:
     login()
@@ -95,6 +95,7 @@ TOKEN = os.getenv("GITHUB_TOKEN")
 REPO = os.getenv("GITHUB_REPO")
 CSV = os.getenv("CSV_PATH")
 EXPIRED = "data/expired.csv"
+DELETED = "data/deleted.csv"
 
 def headers():
     return {"Authorization": f"token {TOKEN}"}
@@ -119,22 +120,23 @@ def save_csv(df, sha, path, msg):
 # --------------------------------------------------
 df, sha = load_csv(CSV)
 exp_df, exp_sha = load_csv(EXPIRED)
+del_df, del_sha = load_csv(DELETED)
 
 today = pd.to_datetime(date.today())
-df["son_kullanma_tarihi"] = pd.to_datetime(df["son_kullanma_tarihi"], errors="coerce")
+df["son_kullanma_tarihi"] = pd.to_datetime(df["son_kullanma_tarihi"])
 
 # --------------------------------------------------
-# EXPIRED MOVE
+# MOVE EXPIRED
 # --------------------------------------------------
 expired = df[df["son_kullanma_tarihi"] < today]
 if not expired.empty:
     exp_df = pd.concat([exp_df, expired], ignore_index=True)
     df = df[df["son_kullanma_tarihi"] >= today]
-    save_csv(exp_df, exp_sha, EXPIRED, "Expired kit eklendi")
-    save_csv(df, sha, CSV, "Expired kit çıkarıldı")
+    save_csv(exp_df, exp_sha, EXPIRED, "Expired eklendi")
+    save_csv(df, sha, CSV, "Expired çıkarıldı")
 
 # --------------------------------------------------
-# UI - ADD FORM
+# UI ADD FORM
 # --------------------------------------------------
 st.set_page_config(layout="wide")
 st.title("📦 Kit Stok Takip")
@@ -143,13 +145,13 @@ with st.form("add"):
     c1, c2, c3, c4 = st.columns(4)
     lot = c1.text_input("Lot numarası")
     test = c2.selectbox("Test", TEST_LIST)
-    adet = c3.number_input("Test sayısı", min_value=1, step=1)
-    skt = c4.date_input("Son Kullanma Tarihi", min_value=date.today())
+    adet = c3.number_input("Test sayısı", min_value=1)
+    skt = c4.date_input("SKT", min_value=date.today())
 
     if st.form_submit_button("Kaydet"):
         dup = df[(df["lot_numarasi"] == lot) & (df["test"] == test)]
         if not dup.empty:
-            st.error("❌ Aynı test için bu lot zaten mevcut")
+            st.error("❌ Aynı test + lot zaten var")
             st.stop()
 
         df = pd.concat([df, pd.DataFrame([{
@@ -160,60 +162,44 @@ with st.form("add"):
         }])], ignore_index=True)
 
         save_csv(df, sha, CSV, "Yeni kit eklendi")
-        st.success("Kayıt eklendi")
+        st.success("Eklendi")
         st.rerun()
 
 # --------------------------------------------------
-# FILTER
+# ACTIVE TABLE
 # --------------------------------------------------
-filter_test = st.selectbox("Test filtresi", ["Tümü"] + TEST_LIST)
-view = df if filter_test == "Tümü" else df[df["test"] == filter_test]
+st.subheader("🟢 Aktif Kitler")
 
-view = view.reset_index(drop=True)
+view = df.copy()
 view["kalan_gun"] = (view["son_kullanma_tarihi"] - today).dt.days
-
-kritik = view[view["kalan_gun"] <= 10]
-if not kritik.empty:
-    st.warning(f"⚠️ Son 10 gün içinde bitecek {len(kritik)} kit var")
-
-# --------------------------------------------------
-# TABLE WITH DELETE
-# --------------------------------------------------
-h = st.columns([2, 6, 2, 2, 2, 1])
-h[0].write("Lot")
-h[1].write("Test")
-h[2].write("Adet")
-h[3].write("SKT")
-h[4].write("Kalan Gün")
-h[5].write("Sil")
 
 for i, row in view.iterrows():
     bg = "#ffcccc" if row["kalan_gun"] <= 10 else "transparent"
-    cols = st.columns([2, 6, 2, 2, 2, 1])
+    cols = st.columns([2, 6, 2, 2, 1])
 
     cols[0].markdown(f"<div style='background:{bg}'>{row['lot_numarasi']}</div>", unsafe_allow_html=True)
     cols[1].markdown(f"<div style='background:{bg}'>{row['test']}</div>", unsafe_allow_html=True)
     cols[2].markdown(f"<div style='background:{bg}'>{row['test_sayisi']}</div>", unsafe_allow_html=True)
     cols[3].markdown(f"<div style='background:{bg}'>{row['son_kullanma_tarihi'].date()}</div>", unsafe_allow_html=True)
-    cols[4].markdown(f"<div style='background:{bg}'>{row['kalan_gun']}</div>", unsafe_allow_html=True)
 
-    if cols[5].button("🗑️", key=f"del_{i}"):
-        df = df.drop(
-            df[
-                (df["lot_numarasi"] == row["lot_numarasi"]) &
-                (df["test"] == row["test"])
-            ].index
-        )
+    if cols[4].button("🗑️", key=f"del_{i}"):
+        del_df = pd.concat([del_df, row.drop("kalan_gun").to_frame().T], ignore_index=True)
+        df = df.drop(row.name)
+        save_csv(del_df, del_sha, DELETED, "Kit silindi")
         save_csv(df, sha, CSV, "Kit silindi")
-        st.success("Kayıt silindi")
         st.rerun()
 
 # --------------------------------------------------
-# FOOTER
+# EXPIRED & DELETED
 # --------------------------------------------------
-st.info(f"Toplam test sayısı: {view['test_sayisi'].sum()}")
+st.divider()
+st.subheader("🔴 Tarihi Geçmiş Kitler")
+st.dataframe(exp_df, use_container_width=True)
+
+st.divider()
+st.subheader("⚫ Silinen Kitler")
+st.dataframe(del_df, use_container_width=True)
 
 if st.button("Çıkış"):
     st.session_state.auth = False
     st.rerun()
-
