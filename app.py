@@ -195,6 +195,8 @@ for i, row in view.iterrows():
         save_csv(del_df, del_sha, DELETED, "Kit silindi")
         save_csv(df, sha, CSV, "Kit silindi")
         st.rerun()
+    st.markdown("---")
+
 
 # --------------------------------------------------
 # EXPIRED & DELETED
