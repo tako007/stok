@@ -1,12 +1,10 @@
-
-# ---- imports ----
 import streamlit as st
 import pandas as pd
 import requests, base64, os, hashlib
 from io import StringIO
 from datetime import date
 
-# ---- TEST LIST ----
+# ---------------- TEST LIST ----------------
 TEST_LIST = [
     "Alanin aminotransferaz (ALT) (Serum/Plazma)",
     "Albümin (Serum/Plazma)",
@@ -63,15 +61,12 @@ TEST_LIST = [
     "Vitamin B12"
 ]
 
-
-
-
-# ---- AUTH ----
+# ---------------- AUTH ----------------
 AUTH_USERNAME = os.getenv("AUTH_USERNAME")
 AUTH_PASSWORD_HASH = os.getenv("AUTH_PASSWORD_HASH")
 
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
+if "auth" not in st.session_state:
+    st.session_state.auth = False
 
 def login():
     st.title("🔐 Giriş")
@@ -80,26 +75,26 @@ def login():
         p = st.text_input("Şifre", type="password")
         if st.form_submit_button("Giriş"):
             if u == AUTH_USERNAME and hashlib.sha256(p.encode()).hexdigest() == AUTH_PASSWORD_HASH:
-                st.session_state.authenticated = True
+                st.session_state.auth = True
                 st.rerun()
             else:
                 st.error("Hatalı bilgi")
 
-if not st.session_state.authenticated:
+if not st.session_state.auth:
     login()
     st.stop()
 
-# ---- GITHUB ----
+# ---------------- GITHUB ----------------
 TOKEN = os.getenv("GITHUB_TOKEN")
 REPO = os.getenv("GITHUB_REPO")
 CSV = os.getenv("CSV_PATH")
 EXPIRED = "data/expired.csv"
 
-def gh_headers():
+def headers():
     return {"Authorization": f"token {TOKEN}"}
 
 def load(path):
-    r = requests.get(f"https://api.github.com/repos/{REPO}/contents/{path}", headers=gh_headers())
+    r = requests.get(f"https://api.github.com/repos/{REPO}/contents/{path}", headers=headers())
     r.raise_for_status()
     j = r.json()
     df = pd.read_csv(StringIO(base64.b64decode(j["content"]).decode()))
@@ -109,56 +104,72 @@ def save(df, sha, path, msg):
     content = base64.b64encode(df.to_csv(index=False).encode()).decode()
     requests.put(
         f"https://api.github.com/repos/{REPO}/contents/{path}",
-        headers=gh_headers(),
+        headers=headers(),
         json={"message": msg, "content": content, "sha": sha}
     ).raise_for_status()
 
-# ---- LOAD DATA ----
+# ---------------- LOAD DATA ----------------
 df, sha = load(CSV)
 exp_df, exp_sha = load(EXPIRED)
 
-# ---- EXPIRED MOVE ----
 today = pd.to_datetime(date.today())
 df["son_kullanma_tarihi"] = pd.to_datetime(df["son_kullanma_tarihi"], errors="coerce")
 
-expired_rows = df[df["son_kullanma_tarihi"] < today]
-if not expired_rows.empty:
-    exp_df = pd.concat([exp_df, expired_rows])
+# ---------------- EXPIRED MOVE ----------------
+expired = df[df["son_kullanma_tarihi"] < today]
+if not expired.empty:
+    exp_df = pd.concat([exp_df, expired], ignore_index=True)
     df = df[df["son_kullanma_tarihi"] >= today]
-    save(exp_df, exp_sha, EXPIRED, "Expired kit eklendi")
-    save(df, sha, CSV, "Expired kit çıkarıldı")
+    save(exp_df, exp_sha, EXPIRED, "Expired eklendi")
+    save(df, sha, CSV, "Expired çıkarıldı")
 
-# ---- UI ----
+# ---------------- UI ----------------
+st.set_page_config(layout="wide")
 st.title("📦 Kit Stok Takip")
 
 with st.form("add"):
     c1, c2, c3, c4 = st.columns(4)
-    lot = c1.text_input("Lot")
+    lot = c1.text_input("Lot numarası")
     test = c2.selectbox("Test", TEST_LIST)
     adet = c3.number_input("Test sayısı", min_value=1, step=1)
-    skt = c4.date_input("SKT")
+    skt = c4.date_input("SKT", min_value=date.today())
+
     if st.form_submit_button("Kaydet"):
+        dup = df[(df["lot_numarasi"] == lot) & (df["test"] == test)]
+        if not dup.empty:
+            st.error("❌ Aynı test için bu lot zaten mevcut")
+            st.stop()
+
         df = pd.concat([df, pd.DataFrame([{
             "lot_numarasi": lot,
             "test": test,
             "test_sayisi": adet,
             "son_kullanma_tarihi": skt
-        }])])
+        }])], ignore_index=True)
+
         save(df, sha, CSV, "Yeni kit eklendi")
+        st.success("Kayıt eklendi")
         st.rerun()
 
-# ---- FILTER ----
+# ---------------- FILTER ----------------
 filter_test = st.selectbox("Test filtresi", ["Tümü"] + TEST_LIST)
-if filter_test != "Tümü":
-    view = df[df["test"] == filter_test]
-else:
-    view = df
+view = df if filter_test == "Tümü" else df[df["test"] == filter_test]
 
-st.dataframe(view)
+view["kalan_gun"] = (view["son_kullanma_tarihi"] - today).dt.days
+
+kritik = view[view["kalan_gun"] <= 10]
+if not kritik.empty:
+    st.warning(f"⚠️ Son 10 gün içinde bitecek {len(kritik)} kit var")
+
+def highlight(row):
+    if row["kalan_gun"] <= 10:
+        return ["background-color:#ffcccc"] * len(row)
+    return [""] * len(row)
+
+st.dataframe(view.style.apply(highlight, axis=1), use_container_width=True)
 
 st.info(f"Toplam test sayısı: {view['test_sayisi'].sum()}")
 
 if st.button("Çıkış"):
-    st.session_state.authenticated = False
+    st.session_state.auth = False
     st.rerun()
-
