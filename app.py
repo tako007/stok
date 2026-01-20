@@ -82,7 +82,7 @@ def login():
                 st.session_state.auth = True
                 st.rerun()
             else:
-                st.error("Hatalı bilgi")
+                st.error("Hatalı kullanıcı adı veya şifre")
 
 if not st.session_state.auth:
     login()
@@ -136,7 +136,7 @@ if not expired.empty:
     save_csv(df, sha, CSV, "Expired çıkarıldı")
 
 # --------------------------------------------------
-# UI ADD FORM
+# UI - ADD FORM
 # --------------------------------------------------
 st.set_page_config(layout="wide")
 st.title("📦 Kit Stok Takip")
@@ -145,8 +145,8 @@ with st.form("add"):
     c1, c2, c3, c4 = st.columns(4)
     lot = c1.text_input("Lot numarası")
     test = c2.selectbox("Test", TEST_LIST)
-    adet = c3.number_input("Test sayısı", min_value=1)
-    skt = c4.date_input("SKT", min_value=date.today())
+    adet = c3.number_input("Test sayısı", min_value=1, step=1)
+    skt = c4.date_input("Son Kullanma Tarihi", min_value=date.today())
 
     if st.form_submit_button("Kaydet"):
         dup = df[(df["lot_numarasi"] == lot) & (df["test"] == test)]
@@ -162,44 +162,53 @@ with st.form("add"):
         }])], ignore_index=True)
 
         save_csv(df, sha, CSV, "Yeni kit eklendi")
-        st.success("Eklendi")
+        st.success("Kayıt eklendi")
         st.rerun()
 
 # --------------------------------------------------
-# ACTIVE TABLE
+# ACTIVE TABLE (REAL TABLE)
 # --------------------------------------------------
 st.subheader("🟢 Aktif Kitler")
 
 view = df.copy()
 view["kalan_gun"] = (view["son_kullanma_tarihi"] - today).dt.days
+view["Sil"] = False
 
-for i, row in view.iterrows():
-    header = st.columns([2, 6, 2, 2, 1])
-    header[0].markdown("**Lot No**")
-    header[1].markdown("**Test**")
-    header[2].markdown("**Adet**")
-    header[3].markdown("**SKT**")
-    header[4].markdown("**Sil**")
+edited = st.data_editor(
+    view,
+    use_container_width=True,
+    disabled=["lot_numarasi", "test", "test_sayisi", "son_kullanma_tarihi", "kalan_gun"],
+    column_config={
+        "Sil": st.column_config.CheckboxColumn("Sil"),
+        "kalan_gun": st.column_config.NumberColumn("Kalan Gün")
+    }
+)
 
-    bg = "#ffcccc" if row["kalan_gun"] <= 10 else "transparent"
-    cols = st.columns([2, 6, 2, 2, 1])
+if st.button("Seçilenleri Sil"):
+    to_delete = edited[edited["Sil"] == True]
 
-    cols[0].markdown(f"<div style='background:{bg}'>{row['lot_numarasi']}</div>", unsafe_allow_html=True)
-    cols[1].markdown(f"<div style='background:{bg}'>{row['test']}</div>", unsafe_allow_html=True)
-    cols[2].markdown(f"<div style='background:{bg}'>{row['test_sayisi']}</div>", unsafe_allow_html=True)
-    cols[3].markdown(f"<div style='background:{bg}'>{row['son_kullanma_tarihi'].date()}</div>", unsafe_allow_html=True)
+    if to_delete.empty:
+        st.warning("Silmek için kayıt seçmedin")
+    else:
+        for _, row in to_delete.iterrows():
+            del_df = pd.concat(
+                [del_df, row.drop(["Sil", "kalan_gun"]).to_frame().T],
+                ignore_index=True
+            )
+            df = df.drop(
+                df[
+                    (df["lot_numarasi"] == row["lot_numarasi"]) &
+                    (df["test"] == row["test"])
+                ].index
+            )
 
-    if cols[4].button("🗑️", key=f"del_{i}"):
-        del_df = pd.concat([del_df, row.drop("kalan_gun").to_frame().T], ignore_index=True)
-        df = df.drop(row.name)
         save_csv(del_df, del_sha, DELETED, "Kit silindi")
         save_csv(df, sha, CSV, "Kit silindi")
+        st.success(f"{len(to_delete)} kayıt silindi")
         st.rerun()
-    st.markdown("---")
-
 
 # --------------------------------------------------
-# EXPIRED & DELETED
+# EXPIRED & DELETED TABLES
 # --------------------------------------------------
 st.divider()
 st.subheader("🔴 Tarihi Geçmiş Kitler")
@@ -209,6 +218,9 @@ st.divider()
 st.subheader("⚫ Silinen Kitler")
 st.dataframe(del_df, use_container_width=True)
 
+# --------------------------------------------------
+# FOOTER
+# --------------------------------------------------
 if st.button("Çıkış"):
     st.session_state.auth = False
     st.rerun()
