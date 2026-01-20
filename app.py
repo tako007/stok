@@ -174,6 +174,13 @@ view = df.copy()
 view["kalan_gun"] = (view["son_kullanma_tarihi"] - today).dt.days
 
 for i, row in view.iterrows():
+    header = st.columns([2, 6, 2, 2, 1])
+    header[0].markdown("**Lot No**")
+    header[1].markdown("**Test**")
+    header[2].markdown("**Adet**")
+    header[3].markdown("**SKT**")
+    header[4].markdown("**Sil**")
+
     bg = "#ffcccc" if row["kalan_gun"] <= 10 else "transparent"
     cols = st.columns([2, 6, 2, 2, 1])
 
