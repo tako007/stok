@@ -7,11 +7,42 @@ from io import StringIO
 from datetime import date
 
 # --------------------------------------------------
-# GitHub ayarları (Streamlit Secrets'ten gelir)
+# BASIC AUTH AYARLARI (PoC amaçlı)
+# --------------------------------------------------
+VALID_USERNAME = "mutdhlab"
+VALID_PASSWORD = "12345MUTDH"
+
+# --------------------------------------------------
+# Session state
+# --------------------------------------------------
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+# --------------------------------------------------
+# LOGIN EKRANI
+# --------------------------------------------------
+def login():
+    st.title("🔐 Giriş Yap")
+
+    with st.form("login_form"):
+        username = st.text_input("Kullanıcı Adı")
+        password = st.text_input("Şifre", type="password")
+        submit = st.form_submit_button("Giriş")
+
+    if submit:
+        if username == VALID_USERNAME and password == VALID_PASSWORD:
+            st.session_state.authenticated = True
+            st.success("Giriş başarılı")
+            st.rerun()
+        else:
+            st.error("Kullanıcı adı veya şifre yanlış")
+
+# --------------------------------------------------
+# GITHUB AYARLARI
 # --------------------------------------------------
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-REPO = os.getenv("GITHUB_REPO")          # tako007/stok
-CSV_PATH = os.getenv("CSV_PATH")         # data/database.csv
+REPO = os.getenv("GITHUB_REPO")
+CSV_PATH = os.getenv("CSV_PATH")
 BRANCH = "main"
 
 API_URL = f"https://api.github.com/repos/{REPO}/contents/{CSV_PATH}"
@@ -51,7 +82,14 @@ def update_csv(df, sha):
     r.raise_for_status()
 
 # --------------------------------------------------
-# UI
+# AUTH KONTROLÜ
+# --------------------------------------------------
+if not st.session_state.authenticated:
+    login()
+    st.stop()
+
+# --------------------------------------------------
+# UYGULAMA (LOGIN SONRASI)
 # --------------------------------------------------
 st.set_page_config(page_title="Stok Takip", layout="wide")
 st.title("📦 Stok Takip Sistemi")
@@ -73,9 +111,6 @@ with st.form("stok_formu"):
 
     kaydet = st.form_submit_button("Kaydet")
 
-# --------------------------------------------------
-# KAYDET
-# --------------------------------------------------
 if kaydet:
     if not lot_no or not test:
         st.error("Lot numarası ve test alanı zorunlu")
@@ -99,9 +134,6 @@ if kaydet:
             st.error("Bir hata oluştu")
             st.code(str(e))
 
-# --------------------------------------------------
-# TABLO
-# --------------------------------------------------
 st.divider()
 st.subheader("📊 Mevcut Stoklar")
 
@@ -110,3 +142,10 @@ try:
     st.dataframe(df, use_container_width=True)
 except:
     st.warning("Veri yüklenemedi")
+
+# --------------------------------------------------
+# ÇIKIŞ
+# --------------------------------------------------
+if st.button("Çıkış Yap"):
+    st.session_state.authenticated = False
+    st.rerun()
