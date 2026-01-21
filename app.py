@@ -39,10 +39,7 @@ def login():
         u = st.text_input("Kullanıcı adı")
         p = st.text_input("Şifre", type="password")
         if st.form_submit_button("Giriş"):
-            if (
-                u == AUTH_USERNAME
-                and hashlib.sha256(p.encode()).hexdigest() == AUTH_PASSWORD_HASH
-            ):
+            if u == AUTH_USERNAME and hashlib.sha256(p.encode()).hexdigest() == AUTH_PASSWORD_HASH:
                 st.session_state.auth = True
                 st.rerun()
             else:
@@ -65,10 +62,7 @@ def headers():
     return {"Authorization": f"token {TOKEN}"}
 
 def load_csv(path):
-    r = requests.get(
-        f"https://api.github.com/repos/{REPO}/contents/{path}",
-        headers=headers()
-    )
+    r = requests.get(f"https://api.github.com/repos/{REPO}/contents/{path}", headers=headers())
     r.raise_for_status()
     j = r.json()
     df = pd.read_csv(StringIO(base64.b64decode(j["content"]).decode()))
@@ -79,36 +73,22 @@ def save_csv(df, sha, path, msg):
     requests.put(
         f"https://api.github.com/repos/{REPO}/contents/{path}",
         headers=headers(),
-        json={
-            "message": msg,
-            "content": content,
-            "sha": sha
-        }
+        json={"message": msg, "content": content, "sha": sha}
     ).raise_for_status()
 
 # --------------------------------------------------
-# TWILIO WHATSAPP (KRİTİK KISIM)
+# TWILIO
 # --------------------------------------------------
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_FROM = os.getenv("TWILIO_FROM")
+TWILIO_TO = os.getenv("TWILIO_TO")
 
-# Twilio WhatsApp Sandbox numarası (SABİT)
-TWILIO_FROM = "whatsapp:+14155238886"
-
-# KENDİ NUMARAN – whatsapp: ÖNEK ŞART
-TWILIO_TO = "whatsapp:+905373554189"
-
-def send_whatsapp(msg):
-    if not all([TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN]):
+def send_sms(msg):
+    if not all([TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM, TWILIO_TO]):
         return
-
     client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-
-    client.messages.create(
-        body=msg,
-        from_=TWILIO_FROM,
-        to=TWILIO_TO
-    )
+    client.messages.create(body=msg, from_=TWILIO_FROM, to=TWILIO_TO)
 
 # --------------------------------------------------
 # LOAD DATA
@@ -118,9 +98,7 @@ exp_df, exp_sha = load_csv(EXPIRED)
 del_df, del_sha = load_csv(DELETED)
 
 def normalize_dates(d):
-    d["son_kullanma_tarihi"] = pd.to_datetime(
-        d["son_kullanma_tarihi"], errors="coerce"
-    )
+    d["son_kullanma_tarihi"] = pd.to_datetime(d["son_kullanma_tarihi"], errors="coerce")
     return d
 
 df = normalize_dates(df)
@@ -137,22 +115,19 @@ if "uyari_gonderildi" not in df.columns:
 
 alert_df = df[
     ((df["son_kullanma_tarihi"] - today).dt.days <= 5) &
-    ((df["son_kullanma_tarihi"] - today).dt.days >= 0) &
     (df["uyari_gonderildi"] == False)
 ]
 
 for _, row in alert_df.iterrows():
     kalan = (row["son_kullanma_tarihi"] - today).days
-
     mesaj = (
-        "⚠️ KİT SKT UYARISI\n\n"
+        f"⚠️ KİT UYARISI\n"
         f"Test: {row['test']}\n"
         f"Lot: {row['lot_numarasi']}\n"
         f"Kalan gün: {kalan}\n"
         f"SKT: {row['son_kullanma_tarihi'].date()}"
     )
-
-    send_whatsapp(mesaj)
+    send_sms(mesaj)
 
     df.loc[
         (df["lot_numarasi"] == row["lot_numarasi"]) &
@@ -160,7 +135,7 @@ for _, row in alert_df.iterrows():
         "uyari_gonderildi"
     ] = True
 
-save_csv(df, sha, CSV, "SKT WhatsApp uyarıları işlendi")
+save_csv(df, sha, CSV, "SKT uyarıları işlendi")
 
 # --------------------------------------------------
 # MOVE EXPIRED
@@ -174,7 +149,7 @@ if not expired.empty:
     save_csv(df, sha, CSV, "Expired çıkarıldı")
 
 # --------------------------------------------------
-# UI – ADD KIT
+# UI
 # --------------------------------------------------
 st.title("📦 Kit Stok Takip")
 
@@ -182,7 +157,7 @@ with st.form("add"):
     c1, c2, c3, c4 = st.columns(4)
     lot = c1.text_input("Lot")
     test = c2.selectbox("Test", TEST_LIST)
-    adet = c3.number_input("Adet", min_value=1, step=1)
+    adet = c3.number_input("Adet", min_value=1)
     skt = c4.date_input("SKT", min_value=date.today())
 
     if st.form_submit_button("Kaydet"):
@@ -193,7 +168,6 @@ with st.form("add"):
             "son_kullanma_tarihi": skt,
             "uyari_gonderildi": False
         }])], ignore_index=True)
-
         save_csv(df, sha, CSV, "Yeni kit eklendi")
         st.success("Eklendi")
         st.rerun()
