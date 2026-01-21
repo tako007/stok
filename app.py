@@ -169,6 +169,8 @@ with st.form("add"):
             "uyari_gonderildi": False
         }])], ignore_index=True)
         save_csv(df, sha, CSV, "Yeni kit eklendi")
+        # Yeni sha'yı al
+        df, sha = load_csv(CSV)
         st.success("Eklendi")
         st.rerun()
 
