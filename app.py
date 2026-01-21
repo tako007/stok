@@ -8,7 +8,7 @@ from twilio.rest import Client
 # --------------------------------------------------
 # PAGE CONFIG
 # --------------------------------------------------
-# st.set_page_config(layout="wide")
+st.set_page_config(layout="centered")
 
 # --------------------------------------------------
 # TEST LIST
