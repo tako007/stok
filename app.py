@@ -50,12 +50,11 @@ if not st.session_state.auth:
     st.stop()
 
 # --------------------------------------------------
-# GITHUB CONFIG
+# GITHUB
 # --------------------------------------------------
 TOKEN = os.getenv("GITHUB_TOKEN")
 REPO = os.getenv("GITHUB_REPO")
 CSV = os.getenv("CSV_PATH")
-EXPIRED = "data/expired.csv"
 DELETED = "data/deleted.csv"
 
 def headers():
@@ -76,121 +75,22 @@ def save_csv(df, sha, path, msg):
     requests.put(
         f"https://api.github.com/repos/{REPO}/contents/{path}",
         headers=headers(),
-        json={
-            "message": msg,
-            "content": content,
-            "sha": sha
-        }
+        json={"message": msg, "content": content, "sha": sha}
     ).raise_for_status()
-
-# --------------------------------------------------
-# TWILIO (SMS / WhatsApp)
-# --------------------------------------------------
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
-TWILIO_FROM = os.getenv("TWILIO_FROM")
-TWILIO_TO = os.getenv("TWILIO_TO")
-
-def send_message(msg):
-    if not all([TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM, TWILIO_TO]):
-        return
-    client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-    client.messages.create(
-        body=msg,
-        from_=TWILIO_FROM,
-        to=TWILIO_TO
-    )
 
 # --------------------------------------------------
 # LOAD DATA
 # --------------------------------------------------
 df, sha = load_csv(CSV)
-exp_df, exp_sha = load_csv(EXPIRED)
 del_df, del_sha = load_csv(DELETED)
 
-def normalize_dates(d):
-    d["son_kullanma_tarihi"] = pd.to_datetime(
-        d["son_kullanma_tarihi"], errors="coerce"
-    )
-    return d
-
-df = normalize_dates(df)
-exp_df = normalize_dates(exp_df)
-del_df = normalize_dates(del_df)
-
+df["son_kullanma_tarihi"] = pd.to_datetime(df["son_kullanma_tarihi"], errors="coerce")
 today = pd.Timestamp.today().normalize()
-
-# --------------------------------------------------
-# ALERT LOGIC (5 GÜN)
-# --------------------------------------------------
-if "uyari_gonderildi" not in df.columns:
-    df["uyari_gonderildi"] = False
-
-alert_df = df[
-    ((df["son_kullanma_tarihi"] - today).dt.days <= 5) &
-    ((df["son_kullanma_tarihi"] - today).dt.days >= 0) &
-    (df["uyari_gonderildi"] == False)
-]
-
-for _, row in alert_df.iterrows():
-    kalan = (row["son_kullanma_tarihi"] - today).days
-    mesaj = (
-        "⚠️ KİT SKT UYARISI\n\n"
-        f"Test: {row['test']}\n"
-        f"Lot: {row['lot_numarasi']}\n"
-        f"Kalan gün: {kalan}\n"
-        f"SKT: {row['son_kullanma_tarihi'].date()}"
-    )
-    send_message(mesaj)
-
-    df.loc[
-        (df["lot_numarasi"] == row["lot_numarasi"]) &
-        (df["test"] == row["test"]),
-        "uyari_gonderildi"
-    ] = True
-
-save_csv(df, sha, CSV, "SKT uyarıları işlendi")
-
-# --------------------------------------------------
-# MOVE EXPIRED
-# --------------------------------------------------
-expired = df[df["son_kullanma_tarihi"] < today]
-
-if not expired.empty:
-    exp_df = pd.concat([exp_df, expired], ignore_index=True)
-    df = df[df["son_kullanma_tarihi"] >= today]
-    save_csv(exp_df, exp_sha, EXPIRED, "Expired eklendi")
-    save_csv(df, sha, CSV, "Expired çıkarıldı")
-
-# --------------------------------------------------
-# UI - ADD KIT
-# --------------------------------------------------
-st.title("📦 Kit Stok Takip")
-
-with st.form("add"):
-    c1, c2, c3, c4 = st.columns(4)
-    lot = c1.text_input("Lot numarası")
-    test = c2.selectbox("Test", TEST_LIST)
-    adet = c3.number_input("Test sayısı", min_value=1, step=1)
-    skt = c4.date_input("Son Kullanma Tarihi", min_value=date.today())
-
-    if st.form_submit_button("Kaydet"):
-        df = pd.concat([df, pd.DataFrame([{
-            "lot_numarasi": lot,
-            "test": test,
-            "test_sayisi": adet,
-            "son_kullanma_tarihi": skt,
-            "uyari_gonderildi": False
-        }])], ignore_index=True)
-
-        save_csv(df, sha, CSV, "Yeni kit eklendi")
-        st.success("Kayıt eklendi")
-        st.rerun()
 
 # --------------------------------------------------
 # FILTER
 # --------------------------------------------------
-st.subheader("🔍 Filtre")
+st.title("📦 Kit Stok Takip")
 
 selected_tests = st.multiselect(
     "Teste göre filtrele",
@@ -202,64 +102,57 @@ if selected_tests:
     view = view[view["test"].isin(selected_tests)]
 
 view["kalan_gun"] = (view["son_kullanma_tarihi"] - today).dt.days
-view["Sil"] = False
 
 # --------------------------------------------------
-# ACTIVE TABLE
+# HEADER
 # --------------------------------------------------
 st.subheader("🟢 Aktif Kitler")
 
-edited = st.data_editor(
-    view,
-    width="stretch",
-    disabled=[
-        "lot_numarasi",
-        "test",
-        "test_sayisi",
-        "son_kullanma_tarihi",
-        "kalan_gun",
-        "uyari_gonderildi"
-    ],
-    column_config={
-        "Sil": st.column_config.CheckboxColumn("🗑️"),
-        "kalan_gun": st.column_config.NumberColumn("Kalan Gün")
-    }
-)
+h = st.columns([2, 3, 1, 2, 1, 0.7])
+h[0].markdown("**Lot**")
+h[1].markdown("**Test**")
+h[2].markdown("**Adet**")
+h[3].markdown("**SKT**")
+h[4].markdown("**Kalan Gün**")
+h[5].markdown("")
 
-if st.button("Seçilenleri Sil"):
-    to_delete = edited[edited["Sil"] == True]
+st.divider()
 
-    if to_delete.empty:
-        st.warning("Silmek için kayıt seçmedin")
-    else:
-        for _, row in to_delete.iterrows():
-            del_df = pd.concat(
-                [del_df, row.drop(["Sil", "kalan_gun"]).to_frame().T],
-                ignore_index=True
-            )
+# --------------------------------------------------
+# ROWS
+# --------------------------------------------------
+for _, row in view.iterrows():
+    c = st.columns([2, 3, 1, 2, 1, 0.7])
 
-            df = df.drop(
-                df[
-                    (df["lot_numarasi"] == row["lot_numarasi"]) &
-                    (df["test"] == row["test"])
-                ].index
-            )
+    c[0].write(row["lot_numarasi"])
+    c[1].write(row["test"])
+    c[2].write(row["test_sayisi"])
+    c[3].write(row["son_kullanma_tarihi"].date())
+    c[4].write(int(row["kalan_gun"]))
+
+    if c[5].button("🗑️", key=f"del_{row['lot_numarasi']}_{row['test']}"):
+        del_df = pd.concat([del_df, row.to_frame().T], ignore_index=True)
+
+        df = df.drop(
+            df[
+                (df["lot_numarasi"] == row["lot_numarasi"]) &
+                (df["test"] == row["test"])
+            ].index
+        )
 
         save_csv(del_df, del_sha, DELETED, "Kit silindi")
         save_csv(df, sha, CSV, "Kit silindi")
-        st.success(f"{len(to_delete)} kayıt silindi")
         st.rerun()
 
 # --------------------------------------------------
-# EXPIRED & DELETED
+# TOTAL (FILTERED)
 # --------------------------------------------------
 st.divider()
-st.subheader("🔴 Tarihi Geçmiş Kitler")
-st.dataframe(exp_df, width="stretch")
+toplam = view["test_sayisi"].sum()
 
-st.divider()
-st.subheader("⚫ Silinen Kitler")
-st.dataframe(del_df, width="stretch")
+st.info(
+    f"🔢 Seçili filtreye göre toplam test sayısı: **{int(toplam)}**"
+)
 
 # --------------------------------------------------
 # LOGOUT
