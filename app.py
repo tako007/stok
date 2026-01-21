@@ -3,26 +3,12 @@ import pandas as pd
 import requests, base64, os, hashlib
 from io import StringIO
 from datetime import date
-from twilio.rest import Client
+from datetime import datetime
 
 # --------------------------------------------------
 # PAGE CONFIG
 # --------------------------------------------------
 st.set_page_config(layout="wide")
-
-# --------------------------------------------------
-# TEST LIST
-# --------------------------------------------------
-TEST_LIST = [
-    "Glukoz (Serum/Plazma)",
-    "Üre (Serum/Plazma)",
-    "Kreatinin (Serum/Plazma)",
-    "ALT (Serum/Plazma)",
-    "AST (Serum/Plazma)",
-    "Etanol (Serum/Plazma)",
-    "TSH",
-    "Vitamin B12"
-]
 
 # --------------------------------------------------
 # AUTH
@@ -55,7 +41,6 @@ if not st.session_state.auth:
 TOKEN = os.getenv("GITHUB_TOKEN")
 REPO = os.getenv("GITHUB_REPO")
 CSV = os.getenv("CSV_PATH")
-DELETED = "data/deleted.csv"
 
 def headers():
     return {"Authorization": f"token {TOKEN}"}
@@ -82,10 +67,19 @@ def save_csv(df, sha, path, msg):
 # LOAD DATA
 # --------------------------------------------------
 df, sha = load_csv(CSV)
-del_df, del_sha = load_csv(DELETED)
 
-df["son_kullanma_tarihi"] = pd.to_datetime(df["son_kullanma_tarihi"], errors="coerce")
 today = pd.Timestamp.today().normalize()
+df["son_kullanma_tarihi"] = pd.to_datetime(df["son_kullanma_tarihi"], errors="coerce")
+
+# status kolonu yoksa ekle
+if "status" not in df.columns:
+    df["status"] = "active"
+
+# expired otomatik hesapla
+df.loc[
+    (df["son_kullanma_tarihi"] < today) & (df["status"] == "active"),
+    "status"
+] = "expired"
 
 # --------------------------------------------------
 # FILTER
@@ -106,23 +100,24 @@ view["kalan_gun"] = (view["son_kullanma_tarihi"] - today).dt.days
 # --------------------------------------------------
 # HEADER
 # --------------------------------------------------
-st.subheader("🟢 Aktif Kitler")
+st.subheader("📋 Tüm Kitler")
 
-h = st.columns([2, 3, 1, 2, 1, 0.7])
+h = st.columns([2, 3, 1, 2, 1, 1, 0.7])
 h[0].markdown("**Lot**")
 h[1].markdown("**Test**")
 h[2].markdown("**Adet**")
 h[3].markdown("**SKT**")
 h[4].markdown("**Kalan Gün**")
-h[5].markdown("")
+h[5].markdown("**Durum**")
+h[6].markdown("")
 
 st.divider()
 
 # --------------------------------------------------
 # ROWS
 # --------------------------------------------------
-for _, row in view.iterrows():
-    c = st.columns([2, 3, 1, 2, 1, 0.7])
+for i, row in view.iterrows():
+    c = st.columns([2, 3, 1, 2, 1, 1, 0.7])
 
     c[0].write(row["lot_numarasi"])
     c[1].write(row["test"])
@@ -130,18 +125,16 @@ for _, row in view.iterrows():
     c[3].write(row["son_kullanma_tarihi"].date())
     c[4].write(int(row["kalan_gun"]))
 
-    if c[5].button("🗑️", key=f"del_{row['lot_numarasi']}_{row['test']}"):
-        del_df = pd.concat([del_df, row.to_frame().T], ignore_index=True)
+    if row["status"] == "active":
+        c[5].success("active")
+    elif row["status"] == "expired":
+        c[5].warning("expired")
+    else:
+        c[5].error("deleted")
 
-        df = df.drop(
-            df[
-                (df["lot_numarasi"] == row["lot_numarasi"]) &
-                (df["test"] == row["test"])
-            ].index
-        )
-
-        save_csv(del_df, del_sha, DELETED, "Kit silindi")
-        save_csv(df, sha, CSV, "Kit silindi")
+    if c[6].button("🗑️", key=f"del_{i}"):
+        df.loc[i, "status"] = "deleted"
+        save_csv(df, sha, CSV, "Kit status deleted")
         st.rerun()
 
 # --------------------------------------------------
