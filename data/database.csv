@@ -1,5 +1,5 @@
 lot_numarasi,test,test_sayisi,son_kullanma_tarihi,uyari_gonderildi
-123,Glukoz (Serum/Plazma),1,2026-02-28,False
+123,Glukoz (Serum/Plazma),1,2026-02-28 00:00:00,False
 111,Glukoz (Serum/Plazma),1,,False
 4567,Glukoz (Serum/Plazma),1,,False
 5345345,Glukoz (Serum/Plazma),1,,False
@@ -8,3 +8,4 @@ lot_numarasi,test,test_sayisi,son_kullanma_tarihi,uyari_gonderildi
 789879,Glukoz (Serum/Plazma),1,,False
 768687,Glukoz (Serum/Plazma),1,,False
 78787878787,Glukoz (Serum/Plazma),1,,False
+7878,Glukoz (Serum/Plazma),1,2026-01-22,False
