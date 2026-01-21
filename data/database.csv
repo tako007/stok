@@ -1,5 +1,5 @@
 lot_numarasi,test,test_sayisi,son_kullanma_tarihi,uyari_gonderildi
-123,Üre (Serum/Plazma),100,2026-01-22 00:00:00,True
+123,Üre (Serum/Plazma),100,2026-01-22,True
 1556,ALT (Serum/Plazma),100,,False
 1556676,ALT (Serum/Plazma),100,,False
-7777,Glukoz (Serum/Plazma),1,2026-01-24,False
+7777,Glukoz (Serum/Plazma),1,,False
