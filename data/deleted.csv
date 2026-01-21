@@ -2,13 +2,18 @@ lot_numarasi,test,test_sayisi,son_kullanma_tarihi,uyari_gonderildi
 12345.0,Alanin aminotransferaz (ALT) (Serum/Plazma),100,,
 12345534.0,Alanin aminotransferaz (ALT) (Serum/Plazma),100,,
 ,Alanin aminotransferaz (ALT) (Serum/Plazma),1,2026-01-21 00:00:00,
-123,Glukoz (Serum/Plazma),1,2026-02-28 00:00:00,False
-111,Glukoz (Serum/Plazma),1,,False
-4567,Glukoz (Serum/Plazma),1,,False
-5345345,Glukoz (Serum/Plazma),1,,False
-53534534534535345,Glukoz (Serum/Plazma),1,,False
-34534534534,Glukoz (Serum/Plazma),1,,False
-789879,Glukoz (Serum/Plazma),1,,False
-768687,Glukoz (Serum/Plazma),1,,False
-78787878787,Glukoz (Serum/Plazma),1,,False
-7878,Glukoz (Serum/Plazma),1,,False
+123.0,Glukoz (Serum/Plazma),1,2026-02-28 00:00:00,False
+111.0,Glukoz (Serum/Plazma),1,,False
+4567.0,Glukoz (Serum/Plazma),1,,False
+5345345.0,Glukoz (Serum/Plazma),1,,False
+5.353453453453535e+16,Glukoz (Serum/Plazma),1,,False
+34534534534.0,Glukoz (Serum/Plazma),1,,False
+789879.0,Glukoz (Serum/Plazma),1,,False
+768687.0,Glukoz (Serum/Plazma),1,,False
+78787878787.0,Glukoz (Serum/Plazma),1,,False
+7878.0,Glukoz (Serum/Plazma),1,,False
+123,Üre (Serum/Plazma),100,2026-01-22 00:00:00,True
+1556,ALT (Serum/Plazma),100,,False
+1556676,ALT (Serum/Plazma),100,,False
+7777,Glukoz (Serum/Plazma),1,,False
+7777,Glukoz (Serum/Plazma),1,,False
