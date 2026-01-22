@@ -165,7 +165,7 @@ with st.form("add"):
             "lot_numarasi": lot,
             "test": test,
             "test_sayisi": adet,
-            "son_kullanma_tarihi": skt,
+            "son_kullanma_tarihi": pd.to_datetime(skt),
             "uyari_gonderildi": False
         }])], ignore_index=True)
         save_csv(df, sha, CSV, "Yeni kit eklendi")
