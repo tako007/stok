@@ -12,8 +12,12 @@ lot_numarasi,test,test_sayisi,son_kullanma_tarihi,uyari_gonderildi
 768687.0,Glukoz (Serum/Plazma),1,,False
 78787878787.0,Glukoz (Serum/Plazma),1,,False
 7878.0,Glukoz (Serum/Plazma),1,,False
-123,Üre (Serum/Plazma),100,2026-01-22 00:00:00,True
-1556,ALT (Serum/Plazma),100,,False
-1556676,ALT (Serum/Plazma),100,,False
-7777,Glukoz (Serum/Plazma),1,,False
-7777,Glukoz (Serum/Plazma),1,,False
+123.0,Üre (Serum/Plazma),100,2026-01-22 00:00:00,True
+1556.0,ALT (Serum/Plazma),100,,False
+1556676.0,ALT (Serum/Plazma),100,,False
+7777.0,Glukoz (Serum/Plazma),1,,False
+7777.0,Glukoz (Serum/Plazma),1,,False
+12345,Glukoz (Serum/Plazma),100,2026-01-23 00:00:00,True
+12345,Glukoz (Serum/Plazma),100,,False
+123456,Glukoz (Serum/Plazma),100,,False
+888,Glukoz (Serum/Plazma),1,,False
