@@ -1,5 +1,5 @@
 lot_numarasi,test,test_sayisi,son_kullanma_tarihi,uyari_gonderildi
-12345,Glukoz (Serum/Plazma),100,2026-01-23 00:00:00,True
+12345,Glukoz (Serum/Plazma),100,2026-01-23,True
 12345,Glukoz (Serum/Plazma),100,,False
 123456,Glukoz (Serum/Plazma),100,,False
-888,Glukoz (Serum/Plazma),1,2026-01-22,False
+888,Glukoz (Serum/Plazma),1,,False
