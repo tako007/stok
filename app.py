@@ -165,12 +165,15 @@ with st.form("add"):
             "lot_numarasi": lot,
             "test": test,
             "test_sayisi": adet,
-            "son_kullanma_tarihi": pd.to_datetime(skt),
+            "son_kullanma_tarihi": pd.to_datetime(skt),  # <<< KRİTİK
             "uyari_gonderildi": False
         }])], ignore_index=True)
+
         save_csv(df, sha, CSV, "Yeni kit eklendi")
-        # Yeni sha'yı al
+
         df, sha = load_csv(CSV)
+        df = normalize_dates(df)  # <<< KRİTİK
+
         st.success("Eklendi")
         st.rerun()
 
