@@ -47,6 +47,22 @@ if not st.session_state.auth:
     st.stop()
 
 # --------------------------------------------------
+# SMS FUNCTION
+# --------------------------------------------------
+def send_sms(msg):
+    sid = os.getenv("TWILIO_ACCOUNT_SID")
+    token = os.getenv("TWILIO_AUTH_TOKEN")
+    from_no = os.getenv("TWILIO_FROM")
+    to_no = os.getenv("TWILIO_TO")
+    
+    if all([sid, token, from_no, to_no]):
+        try:
+            client = Client(sid, token)
+            client.messages.create(body=msg, from_=from_no, to=to_no)
+        except Exception as e:
+            st.error(f"SMS Gönderim Hatası: {e}")
+
+# --------------------------------------------------
 # GITHUB FUNCTIONS
 # --------------------------------------------------
 def get_headers():
@@ -80,23 +96,45 @@ del_df, del_sha = load_csv(DELETED_PATH)
 today = pd.Timestamp.today().normalize()
 
 # --------------------------------------------------
-# AUTO-PROCESSING (EXPIRED & ALERTS)
+# AUTO-PROCESSING (SMS ALERTS & EXPIRED)
 # --------------------------------------------------
 updated_main = False
 
 if not df.empty:
-    # SKT Geçenleri Taşı
+    # 1. SMS UYARI MEKANİZMASI (5 GÜN KALA)
+    if "uyari_gonderildi" not in df.columns:
+        df["uyari_gonderildi"] = False
+    
+    # Henüz uyarı gitmemiş ve SKT'sine 5 gün veya daha az kalmış olanları bul
+    alert_mask = ((df["son_kullanma_tarihi"] - today).dt.days <= 5) & (df["uyari_gonderildi"] == False)
+    
+    if alert_mask.any():
+        for idx, row in df[alert_mask].iterrows():
+            kalan = (row["son_kullanma_tarihi"] - today).days
+            mesaj = (
+                f"⚠️ KİT SKT UYARISI\n"
+                f"Test: {row['test']}\n"
+                f"Lot: {row['lot_numarasi']}\n"
+                f"Kalan: {kalan} gün\n"
+                f"SKT: {row['son_kullanma_tarihi'].date()}"
+            )
+            send_sms(mesaj)
+            df.at[idx, "uyari_gonderildi"] = True
+        updated_main = True
+
+    # 2. SKT GEÇENLERİ EXPIRED'A TAŞI
     expired_mask = df["son_kullanma_tarihi"] < today
     if expired_mask.any():
         expired_rows = df[expired_mask].copy()
         exp_df = pd.concat([exp_df, expired_rows], ignore_index=True)
         df = df[~expired_mask].copy()
+        # Önce Expired dosyasını kaydet
         exp_sha = save_csv(exp_df, exp_sha, EXPIRED_PATH, "Auto-expired move")
         updated_main = True
 
-    # Değişiklik varsa ana dosyayı kaydet
+    # Eğer uyarı gitti veya SKT geçtiyse ana tabloyu GitHub'da güncelle
     if updated_main:
-        sha = save_csv(df, sha, CSV_PATH, "Main cleanup")
+        sha = save_csv(df, sha, CSV_PATH, "Otomatik SKT/Uyari guncellemesi")
 
 # --------------------------------------------------
 # UI - HEADER & ADD FORM
@@ -119,14 +157,15 @@ with st.expander("➕ Yeni Kit Girişi Yap"):
             st.rerun()
 
 # --------------------------------------------------
-# UI - TABS (EXPIRED & DELETED BURADA)
+# UI - TABS
 # --------------------------------------------------
 tab1, tab2, tab3 = st.tabs(["📋 Mevcut Stok", "🕒 SKT Geçenler", "🗑️ Silinenler"])
 
 with tab1:
     if not df.empty:
         df["kalan_gun"] = (df["son_kullanma_tarihi"] - today).dt.days
-        # Silme işlemi için seçim kutusu
+        
+        # Silme işlemi
         to_delete = st.selectbox("Silmek istediğiniz kiti seçin (Lot)", df["lot_numarasi"].tolist(), index=None, placeholder="Lot seçiniz...")
         if st.button("Seçili Kiti Sil"):
             if to_delete:
@@ -134,25 +173,29 @@ with tab1:
                 del_df = pd.concat([del_df, row_to_del], ignore_index=True)
                 df = df[df["lot_numarasi"] != to_delete]
                 
-                # Önce Deleted listesini kaydet, sonra Main'i
+                # SHA zincirini bozmadan sıralı kayıt
                 new_del_sha = save_csv(del_df, del_sha, DELETED_PATH, "Manüel silme")
                 save_csv(df, sha, CSV_PATH, "Stoktan çıkarıldı")
                 st.warning(f"{to_delete} lot numaralı kit silindi.")
                 st.rerun()
         
-        st.dataframe(df.sort_values("son_kullanma_tarihi"), use_container_width=True)
+        # Tablo Görünümü
+        def highlight_alert(row):
+            return ['background-color: #ffcccc' if row.kalan_gun <= 5 else '' for _ in row]
+
+        st.dataframe(df.sort_values("son_kullanma_tarihi").style.apply(highlight_alert, axis=1), use_container_width=True)
     else:
         st.write("Stok boş.")
 
 with tab2:
-    st.subheader("Süresi Dolan Kitler")
+    st.subheader("Süresi Dolan Kitler (Expired)")
     if not exp_df.empty:
         st.dataframe(exp_df, use_container_width=True)
     else:
         st.info("Süresi dolmuş kit bulunmuyor.")
 
 with tab3:
-    st.subheader("Sistemden Silinen Kayıtlar")
+    st.subheader("Sistemden Silinen Kayıtlar (Deleted)")
     if not del_df.empty:
         st.dataframe(del_df, use_container_width=True)
     else:
