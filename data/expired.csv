@@ -1,2 +1,5 @@
-lot_numarasi,test,test_sayisi,son_kullanma_tarihi
-908.0,Alanin aminotransferaz (ALT) (Serum/Plazma),6,2026-01-20
+lot_numarasi,test,test_sayisi,son_kullanma_tarihi,uyari_gonderildi
+908.0,Alanin aminotransferaz (ALT) (Serum/Plazma),6,2026-01-20,
+9000.0,Glukoz (Serum/Plazma),1,2026-01-22,True
+90006.0,Glukoz (Serum/Plazma),1,2026-01-22,True
+0.0,Glukoz (Serum/Plazma),1,2026-01-22,True
